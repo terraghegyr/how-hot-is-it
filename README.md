@@ -1,28 +1,20 @@
-# how-hot-is-it
+# HOWHOTISIT
 
-A lightweight CPU temperature watcher for low-resource servers in rooms without
-full-time AC. A tiny POSIX shell agent runs on each host via cron and pushes the
+A lightweight CPU temperature watcher. A tiny shell script agent runs on each host via cron and pushes the
 max CPU temperature to a single static Go server, which stores 24 h of history in
 SQLite, renders a live dashboard, and fires Telegram alerts on overheating,
 recovery, and reporting outages.
 
-- **Agent** — one POSIX shell script (`agent.sh`). Needs only `lm-sensors`,
+> (I'm running Proxmox on second-hand old office desktop. Grafana is great but I only watch temperature and for that, it is too much both capability wise and resource usage wise. So I made this.)
+> (Entirely Claude coded. Throughly but only tested in my environement: Proxmox, Intel Core i7-8700 CPU)
+> This is very simple system especially the agent side since it is only just a bash script, but use at your own risk.
+
+- **Agent** — one shell script (`agent.sh`). Needs only `lm-sensors`,
   `curl`, and `awk`. Runs on the host (not in Docker — it needs host sensors).
 - **Server** — one static Go binary (stdlib `net/http` + pure-Go
   `modernc.org/sqlite`, so `CGO_ENABLED=0` builds and ships `FROM scratch`).
 - **Frontend** — vanilla JS + [uPlot](https://github.com/leeoniya/uPlot)
   (vendored, embedded via `go:embed`). No npm, no bundler, no build step.
-
-## Layout
-
-```
-server/     Go module: the binary, embedded web/ dashboard, Dockerfile
-            (Go *_test.go files live here beside the code they test —
-             Go requires tests in the same package)
-agent.sh    host-side shell agent
-test/       agent shell tests + sensor fixtures (test-agent.sh, testdata/)
-docker-compose.yml.example, Makefile   build/run orchestration (root)
-```
 
 ## Quick start (server)
 
@@ -36,7 +28,7 @@ cp server/config.example.json data/config.json     # edit as needed
 docker compose up -d
 ```
 
-Open http://localhost:8080. The `./data` bind mount holds `config.json` and
+Open http://localhost:8080 (default). The `./data` bind mount holds `config.json` and
 `howhot.db`. The container clock equals the host clock; all timestamps are
 server-assigned (agents drift).
 
@@ -103,6 +95,22 @@ make run          # builds and runs with ./config.json and ./howhot.db
 Unknown machine IDs posting to `/api/report` get a `404` and are discarded —
 there is no auto-enrollment. Deleting a machine removes its readings and alert
 state but keeps its past alerts in history (under the name it had).
+
+---
+
+# Dev stuff
+
+## Layout
+
+```
+server/     Go module: the binary, embedded web/ dashboard, Dockerfile
+            (Go *_test.go files live here beside the code they test —
+             Go requires tests in the same package)
+agent.sh    host-side shell agent
+test/       agent shell tests + sensor fixtures (test-agent.sh, testdata/)
+docker-compose.yml.example, Makefile   build/run orchestration (root)
+```
+
 
 ## API
 
