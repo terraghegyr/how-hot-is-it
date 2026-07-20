@@ -21,6 +21,7 @@ const (
 	EventRecovery      EventType = "recovery"
 	EventStale         EventType = "stale"
 	EventStaleRecovery EventType = "stale_recovery"
+	EventAggregated    EventType = "aggregated"
 )
 
 // AlertState is the persisted per-machine state driving the alert machine.
@@ -28,6 +29,7 @@ type AlertState struct {
 	Alerting      bool
 	LastNotified  int64 // unix seconds of last breach notification (for re-notify)
 	StaleNotified bool
+	AggNotified   bool // aggregated-alert de-dup; no recovery message, reset silently
 }
 
 // Reading is the latest reading for a machine. HasData is false when the machine
@@ -45,6 +47,7 @@ type Event struct {
 	Type    EventType
 	TempC   *float64 // nil for stale/stale_recovery
 	Persist bool
+	Count   int // number of readings in window, for EventAggregated only
 }
 
 // Message renders the human-facing text for an event given the machine name and
@@ -124,4 +127,30 @@ func Evaluate(st AlertState, r Reading, now time.Time, threshold float64) (Alert
 	}
 
 	return st, events
+}
+
+// EvaluateAggregated is the pure aggregated-alert machine. count is the number of
+// readings in the window at/above the aggregated threshold; maxTemp is the hottest
+// of them (may be nil). It fires once when count exceeds thresholdCount, unless a
+// main breach is already active (st.Alerting) — that case is treated as consumed
+// so the aggregated alert doesn't fire the instant the main breach recovers while
+// the window is still warm. There is no recovery event: the flag resets silently
+// once the window count falls back to the threshold or below.
+func EvaluateAggregated(st AlertState, count, thresholdCount int, maxTemp *float64) (AlertState, []Event) {
+	over := count > thresholdCount
+	switch {
+	case !over:
+		st.AggNotified = false
+		return st, nil
+	case st.Alerting:
+		// Covered by the active main breach; mark consumed, don't fire.
+		st.AggNotified = true
+		return st, nil
+	default: // over && main not alerting
+		if st.AggNotified {
+			return st, nil
+		}
+		st.AggNotified = true
+		return st, []Event{{Type: EventAggregated, TempC: maxTemp, Persist: true, Count: count}}
+	}
 }

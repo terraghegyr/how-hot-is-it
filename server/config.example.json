@@ -2,5 +2,8 @@
   "telegram_bot_token": "",
   "telegram_chat_id": "",
   "alert_threshold_c": 80,
-  "listen_port": 8080
+  "listen_port": 8080,
+  "aggregated_threshold_c": 50,
+  "aggregated_count": 5,
+  "aggregated_window_minutes": 15
 }

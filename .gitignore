@@ -1,5 +1,6 @@
-# Build artifacts
+# Build artifacts (the binary, wherever it's built)
 /how-hot-is-it
+/server/how-hot-is-it
 
 # Local compose file (copy from docker-compose.yml.example, adapt per host)
 /docker-compose.yml

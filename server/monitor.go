@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -19,6 +20,21 @@ type Monitor struct {
 	alertingEnabled bool
 	now             func() time.Time
 	mu              sync.Mutex // serializes EvaluateMachine (ingest vs tick)
+
+	// Aggregated alert (all zero/false = disabled).
+	aggEnabled   bool
+	aggThreshold float64
+	aggCount     int
+	aggWindow    time.Duration
+}
+
+// message renders the Telegram/history text for an event. Aggregated events need
+// config context (count, window) that the pure Event.Message doesn't carry.
+func (m *Monitor) message(ev Event, name string) string {
+	if ev.Type == EventAggregated {
+		return fmt.Sprintf("📊 %s: %d readings ≥ %.0f°C in %d min", name, ev.Count, m.aggThreshold, int(m.aggWindow.Minutes()))
+	}
+	return ev.Message(name, m.threshold)
 }
 
 // EvaluateMachine runs the alert state machine for one machine against its latest
@@ -38,10 +54,25 @@ func (m *Monitor) EvaluateMachine(machineID, name string) error {
 		return err
 	}
 	newSt, events := Evaluate(st, r, now, m.threshold)
+
+	// Aggregated alert: evaluated against the count of recent readings above the
+	// aggregated threshold, using the just-updated main Alerting state so an
+	// active breach suppresses it.
+	if m.aggEnabled {
+		since := now.Add(-m.aggWindow).Unix()
+		count, maxT, err := m.store.CountReadingsAbove(machineID, since, m.aggThreshold)
+		if err != nil {
+			return err
+		}
+		var aggEvents []Event
+		newSt, aggEvents = EvaluateAggregated(newSt, count, m.aggCount, maxT)
+		events = append(events, aggEvents...)
+	}
+
 	for _, ev := range events {
 		ok := true
 		if m.alertingEnabled {
-			ok = m.notify.Send(ev.Message(name, m.threshold))
+			ok = m.notify.Send(m.message(ev, name))
 		}
 		if ev.Persist {
 			if err := m.store.InsertAlert(AlertRow{

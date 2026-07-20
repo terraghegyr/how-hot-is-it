@@ -41,6 +41,10 @@ func main() {
 		threshold:       cfg.AlertThresholdC,
 		alertingEnabled: cfg.AlertingEnabled(),
 		now:             now,
+		aggEnabled:      cfg.AggregatedEnabled(),
+		aggThreshold:    cfg.AggregatedThresholdC,
+		aggCount:        cfg.AggregatedCount,
+		aggWindow:       time.Duration(cfg.AggregatedWindowMinutes) * time.Minute,
 	}
 	stop := make(chan struct{})
 	defer close(stop)
@@ -58,7 +62,8 @@ func main() {
 	handler := NewServer(store, cfg.AlertThresholdC, webFS, now, onReport)
 
 	addr := ":" + strconv.Itoa(cfg.ListenPort)
-	log.Printf("how-hot-is-it listening on %s (threshold %.0f°C, alerting=%v)", addr, cfg.AlertThresholdC, cfg.AlertingEnabled())
+	log.Printf("how-hot-is-it listening on %s (threshold %.0f°C, alerting=%v, aggregated=%v)",
+		addr, cfg.AlertThresholdC, cfg.AlertingEnabled(), cfg.AggregatedEnabled())
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("server: %v", err)
 	}
