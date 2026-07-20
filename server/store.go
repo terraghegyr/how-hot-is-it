@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS alert_state (
   machine_id TEXT PRIMARY KEY,
   alerting INTEGER NOT NULL DEFAULT 0,
   last_notified INTEGER NOT NULL DEFAULT 0,
-  stale_notified INTEGER NOT NULL DEFAULT 0
+  stale_notified INTEGER NOT NULL DEFAULT 0,
+  agg_notified INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS alerts (
@@ -72,7 +73,37 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	// Lightweight forward migration for DBs created before agg_notified existed
+	// (CREATE TABLE IF NOT EXISTS won't add columns to an existing table).
+	if err := ensureColumn(db, "alert_state", "agg_notified", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
+}
+
+// ensureColumn adds a column to a table if it isn't already present. Idempotent
+// so it is safe to run on every startup.
+func ensureColumn(db *sql.DB, table, column, decl string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil // already present
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + decl)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -185,9 +216,9 @@ func (s *Store) PruneReadings(cutoff int64) error {
 // none stored yet).
 func (s *Store) GetAlertState(id string) (AlertState, error) {
 	var st AlertState
-	var alerting, stale int
-	err := s.db.QueryRow(`SELECT alerting, last_notified, stale_notified FROM alert_state WHERE machine_id=?`, id).
-		Scan(&alerting, &st.LastNotified, &stale)
+	var alerting, stale, agg int
+	err := s.db.QueryRow(`SELECT alerting, last_notified, stale_notified, agg_notified FROM alert_state WHERE machine_id=?`, id).
+		Scan(&alerting, &st.LastNotified, &stale, &agg)
 	if err == sql.ErrNoRows {
 		return AlertState{}, nil
 	}
@@ -196,19 +227,21 @@ func (s *Store) GetAlertState(id string) (AlertState, error) {
 	}
 	st.Alerting = alerting != 0
 	st.StaleNotified = stale != 0
+	st.AggNotified = agg != 0
 	return st, nil
 }
 
 // SaveAlertState upserts the alert state for a machine.
 func (s *Store) SaveAlertState(id string, st AlertState) error {
 	_, err := s.db.Exec(`
-INSERT INTO alert_state(machine_id, alerting, last_notified, stale_notified)
-VALUES(?,?,?,?)
+INSERT INTO alert_state(machine_id, alerting, last_notified, stale_notified, agg_notified)
+VALUES(?,?,?,?,?)
 ON CONFLICT(machine_id) DO UPDATE SET
   alerting=excluded.alerting,
   last_notified=excluded.last_notified,
-  stale_notified=excluded.stale_notified`,
-		id, b2i(st.Alerting), st.LastNotified, b2i(st.StaleNotified))
+  stale_notified=excluded.stale_notified,
+  agg_notified=excluded.agg_notified`,
+		id, b2i(st.Alerting), st.LastNotified, b2i(st.StaleNotified), b2i(st.AggNotified))
 	return err
 }
 
@@ -280,6 +313,25 @@ func (s *Store) LatestReading(id string) (Reading, error) {
 	}
 	r.HasData = true
 	return r, nil
+}
+
+// CountReadingsAbove returns how many readings for a machine at or above temp have
+// ts >= since, plus the max temp among them (nil if none). Used by the aggregated
+// alert to detect sustained mild elevation.
+func (s *Store) CountReadingsAbove(id string, since int64, temp float64) (int, *float64, error) {
+	var n int
+	var maxT sql.NullFloat64
+	err := s.db.QueryRow(
+		`SELECT COUNT(*), MAX(temp_c) FROM readings WHERE machine_id=? AND ts>=? AND temp_c>=?`,
+		id, since, temp).Scan(&n, &maxT)
+	if err != nil {
+		return 0, nil, err
+	}
+	if maxT.Valid {
+		v := maxT.Float64
+		return n, &v, nil
+	}
+	return n, nil, nil
 }
 
 // History returns uPlot-native columnar data for the given machine ids over

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -148,6 +149,93 @@ func TestHistoryColumnarWithGaps(t *testing.T) {
 	seriesA := h.Data[1].([]*float64)
 	if seriesA[2] == nil || *seriesA[2] != 42 {
 		t.Fatalf("expected a[2]=42, got %v", seriesA[2])
+	}
+}
+
+func TestCountReadingsAbove(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("a", 1000)
+	base := int64(1_700_000_000)
+	// In-window readings: 48 (below), 50 (at), 55, 62 -> 3 at/above 50, max 62.
+	s.AddReading(m.ID, base+10, 48)
+	s.AddReading(m.ID, base+20, 50)
+	s.AddReading(m.ID, base+30, 55)
+	s.AddReading(m.ID, base+40, 62)
+	// Out-of-window hot reading must not count.
+	s.AddReading(m.ID, base-1000, 90)
+
+	count, maxT, err := s.CountReadingsAbove(m.ID, base, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 3 {
+		t.Fatalf("expected 3 readings >=50 in window, got %d", count)
+	}
+	if maxT == nil || *maxT != 62 {
+		t.Fatalf("expected max 62, got %v", maxT)
+	}
+
+	// None above a high threshold -> zero count, nil max.
+	count, maxT, err = s.CountReadingsAbove(m.ID, base, 99)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 || maxT != nil {
+		t.Fatalf("expected 0/nil, got %d/%v", count, maxT)
+	}
+}
+
+func TestMigrationAddsAggColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	// Create a DB with the pre-agg_notified alert_state schema and a row.
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE alert_state (
+	  machine_id TEXT PRIMARY KEY,
+	  alerting INTEGER NOT NULL DEFAULT 0,
+	  last_notified INTEGER NOT NULL DEFAULT 0,
+	  stale_notified INTEGER NOT NULL DEFAULT 0);
+	INSERT INTO alert_state(machine_id, alerting) VALUES('m1', 1);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	// OpenStore must migrate the old DB (add agg_notified) without error.
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("open/migrate old db: %v", err)
+	}
+	st, err := s.GetAlertState("m1")
+	if err != nil {
+		t.Fatalf("read migrated row: %v", err)
+	}
+	if !st.Alerting || st.AggNotified {
+		t.Fatalf("expected alerting kept and agg_notified defaulting false, got %+v", st)
+	}
+	// Writing the new field works after migration.
+	if err := s.SaveAlertState("m1", AlertState{AggNotified: true}); err != nil {
+		t.Fatal(err)
+	}
+	st, _ = s.GetAlertState("m1")
+	if !st.AggNotified {
+		t.Fatal("agg_notified should persist after migration")
+	}
+}
+
+func TestAlertStatePersistsAggNotified(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.SaveAlertState("m1", AlertState{Alerting: true, AggNotified: true, LastNotified: 42}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetAlertState("m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.AggNotified || !got.Alerting || got.LastNotified != 42 {
+		t.Fatalf("state did not round-trip: %+v", got)
 	}
 }
 

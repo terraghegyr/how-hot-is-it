@@ -55,6 +55,103 @@ func TestIngestTriggersImmediateAlert(t *testing.T) {
 	}
 }
 
+// Report readings that stay below the main threshold but above the aggregated
+// one; once more than aggCount land in the window, exactly one aggregated alert
+// fires via the ingest path.
+func TestIngestAggregatedAlert(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("warmbox", 1000)
+
+	var msgCount int32
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&msgCount, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer tg.Close()
+
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	notifier := &TelegramNotifier{BaseURL: tg.URL, Token: "t", ChatID: "c", Client: &http.Client{Timeout: 5 * time.Second}}
+	mon := &Monitor{
+		store: s, notify: notifier, threshold: testThreshold, alertingEnabled: true, now: clk.now,
+		aggEnabled: true, aggThreshold: 50, aggCount: 5, aggWindow: 15 * time.Minute,
+	}
+	srv := newTestServerHook(t, s, clk.now, func(id, name string) { mon.EvaluateMachine(id, name) })
+
+	post := func(temp string) {
+		resp, err := http.Post(srv.URL+"/api/report", "application/json",
+			strings.NewReader(`{"machine_id":"`+m.ID+`","temp_c":`+temp+`}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+
+	// 5 warm readings (55°C): at/above 50 but count is not yet > 5.
+	for i := 0; i < 5; i++ {
+		post("55")
+	}
+	if got := atomic.LoadInt32(&msgCount); got != 0 {
+		t.Fatalf("no alert expected at count 5, got %d", got)
+	}
+	// 6th crosses the count -> one aggregated alert.
+	post("55")
+	if got := atomic.LoadInt32(&msgCount); got != 1 {
+		t.Fatalf("expected exactly 1 aggregated alert, got %d", got)
+	}
+	// Further warm readings do not re-fire.
+	post("55")
+	if got := atomic.LoadInt32(&msgCount); got != 1 {
+		t.Fatalf("aggregated must not re-fire, got %d", got)
+	}
+	alerts, _ := s.ListAlerts(50)
+	if len(alerts) != 1 || alerts[0].Type != "aggregated" {
+		t.Fatalf("expected one aggregated row, got %+v", alerts)
+	}
+	if alerts[0].TempC == nil || *alerts[0].TempC != 55 {
+		t.Fatalf("aggregated row should carry the window max temp 55, got %v", alerts[0].TempC)
+	}
+}
+
+// A main breach suppresses the aggregated alert even though the window is full of
+// hot readings.
+func TestIngestAggregatedSuppressedByBreach(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("hotbox", 1000)
+
+	var msgCount int32
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&msgCount, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer tg.Close()
+
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	notifier := &TelegramNotifier{BaseURL: tg.URL, Token: "t", ChatID: "c", Client: &http.Client{Timeout: 5 * time.Second}}
+	mon := &Monitor{
+		store: s, notify: notifier, threshold: testThreshold, alertingEnabled: true, now: clk.now,
+		aggEnabled: true, aggThreshold: 50, aggCount: 5, aggWindow: 15 * time.Minute,
+	}
+	srv := newTestServerHook(t, s, clk.now, func(id, name string) { mon.EvaluateMachine(id, name) })
+
+	// 8 readings well above the main threshold: the first fires a breach; the rest
+	// grow the aggregated window count, but aggregated stays suppressed.
+	for i := 0; i < 8; i++ {
+		resp, err := http.Post(srv.URL+"/api/report", "application/json",
+			strings.NewReader(`{"machine_id":"`+m.ID+`","temp_c":90}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	if got := atomic.LoadInt32(&msgCount); got != 1 {
+		t.Fatalf("expected only the breach message (aggregated suppressed), got %d", got)
+	}
+	alerts, _ := s.ListAlerts(50)
+	if len(alerts) != 1 || alerts[0].Type != "breach" {
+		t.Fatalf("expected only a breach row, got %+v", alerts)
+	}
+}
+
 func TestIntegrationBreachSustainedRecovery(t *testing.T) {
 	s := newTestStore(t)
 	m, _ := s.CreateMachine("hotbox", 1000)

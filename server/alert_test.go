@@ -160,3 +160,65 @@ func TestNeverReportedNoEvents(t *testing.T) {
 		t.Fatalf("machine with no data should produce no events, got %+v", ev)
 	}
 }
+
+const testAggCount = 5
+
+func TestAggregatedBelowCountNoEvent(t *testing.T) {
+	st, ev := EvaluateAggregated(AlertState{}, 5, testAggCount, tempPtr(55)) // 5 is not > 5
+	if len(ev) != 0 {
+		t.Fatalf("count == threshold should not fire, got %+v", ev)
+	}
+	if st.AggNotified {
+		t.Fatal("flag should stay false below threshold")
+	}
+}
+
+func TestAggregatedFiresOnce(t *testing.T) {
+	st, ev := EvaluateAggregated(AlertState{}, 6, testAggCount, tempPtr(57))
+	if len(ev) != 1 || ev[0].Type != EventAggregated || !ev[0].Persist {
+		t.Fatalf("expected one persisted aggregated event, got %+v", ev)
+	}
+	if ev[0].Count != 6 || ev[0].TempC == nil || *ev[0].TempC != 57 {
+		t.Fatalf("event should carry count and max temp, got %+v", ev[0])
+	}
+	if !st.AggNotified {
+		t.Fatal("flag should be set after firing")
+	}
+	// Still over, already notified -> no re-fire.
+	_, ev2 := EvaluateAggregated(st, 8, testAggCount, tempPtr(60))
+	if len(ev2) != 0 {
+		t.Fatalf("should not re-fire while still notified, got %+v", ev2)
+	}
+}
+
+func TestAggregatedResetsThenCanFireAgain(t *testing.T) {
+	st, _ := EvaluateAggregated(AlertState{}, 6, testAggCount, tempPtr(55))
+	// Count falls back to/below threshold -> flag resets silently, no event.
+	st, ev := EvaluateAggregated(st, 3, testAggCount, nil)
+	if len(ev) != 0 || st.AggNotified {
+		t.Fatalf("expected silent reset, got events=%+v notified=%v", ev, st.AggNotified)
+	}
+	// Rises again -> fires again.
+	_, ev = EvaluateAggregated(st, 7, testAggCount, tempPtr(56))
+	if len(ev) != 1 {
+		t.Fatalf("expected re-fire after reset, got %+v", ev)
+	}
+}
+
+func TestAggregatedSuppressedByMainBreach(t *testing.T) {
+	// Main breach active: aggregated must not fire even though count is over.
+	st, ev := EvaluateAggregated(AlertState{Alerting: true}, 9, testAggCount, tempPtr(85))
+	if len(ev) != 0 {
+		t.Fatalf("aggregated must be suppressed while main breach active, got %+v", ev)
+	}
+	if !st.AggNotified {
+		t.Fatal("suppression should mark the flag consumed")
+	}
+	// Main recovers (Alerting=false) but window still warm (count over) and flag
+	// consumed -> still no fire (no duplicate alert on recovery).
+	st.Alerting = false
+	_, ev = EvaluateAggregated(st, 9, testAggCount, tempPtr(70))
+	if len(ev) != 0 {
+		t.Fatalf("no aggregated alert should fire right after a main recovery, got %+v", ev)
+	}
+}

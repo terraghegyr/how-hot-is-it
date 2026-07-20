@@ -116,6 +116,7 @@ const EVENT_LABEL = {
   recovery: "✅ recovery",
   stale: "⚠️ stale",
   stale_recovery: "📡 reporting again",
+  aggregated: "📊 aggregated",
 };
 
 function renderAlerts(alerts) {

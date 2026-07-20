@@ -16,6 +16,14 @@ type Config struct {
 	// to https://api.telegram.org and can be overridden here or via the
 	// TELEGRAM_API_BASE environment variable.
 	TelegramAPIBase string `json:"telegram_api_base"`
+
+	// Aggregated alert: fire once when more than AggregatedCount readings are at
+	// or above AggregatedThresholdC within the last AggregatedWindowMinutes. Meant
+	// for sustained mild elevation below AlertThresholdC. Disabled unless all three
+	// are > 0. No recovery message; suppressed while a main breach is active.
+	AggregatedThresholdC    float64 `json:"aggregated_threshold_c"`
+	AggregatedCount         int     `json:"aggregated_count"`
+	AggregatedWindowMinutes int     `json:"aggregated_window_minutes"`
 }
 
 const defaultTelegramAPIBase = "https://api.telegram.org"
@@ -54,4 +62,10 @@ func (c *Config) applyDefaults() {
 // state transitions are still recorded in the alerts table (telegram_ok=1).
 func (c Config) AlertingEnabled() bool {
 	return c.TelegramBotToken != "" && c.TelegramChatID != ""
+}
+
+// AggregatedEnabled reports whether the aggregated alert is configured. All three
+// values must be positive; any missing/zero field leaves it off.
+func (c Config) AggregatedEnabled() bool {
+	return c.AggregatedThresholdC > 0 && c.AggregatedCount > 0 && c.AggregatedWindowMinutes > 0
 }

@@ -57,7 +57,10 @@ make run          # builds and runs with ./config.json and ./howhot.db
   "telegram_bot_token": "123456:ABC...",
   "telegram_chat_id": "-100123456789",
   "alert_threshold_c": 80,
-  "listen_port": 8080
+  "listen_port": 8080,
+  "aggregated_threshold_c": 50,
+  "aggregated_count": 5,
+  "aggregated_window_minutes": 15
 }
 ```
 
@@ -67,6 +70,11 @@ make run          # builds and runs with ./config.json and ./howhot.db
   delivery channel.
 - `telegram_api_base` (or the `TELEGRAM_API_BASE` env var) overrides the Telegram
   API base URL; used by the tests to point at a fake endpoint.
+- **Aggregated alert** (`aggregated_*`): catches sustained mild elevation *below*
+  the main threshold. It fires once when **more than `aggregated_count`** readings
+  are at/above `aggregated_threshold_c` within the last `aggregated_window_minutes`.
+  All three are configurable; leave any of them out (or `0`) to disable the
+  feature. See [Alerting](#alerting) for the exact behaviour.
 - Restart the server to apply config changes.
 
 ## Enrolling a machine
@@ -146,6 +154,15 @@ short spike between ticks is never missed) and also on a 60 s maintenance tick
   ⚠️ message; it clears with a 📡 message when it reports again (this and the
   re-notify timer are what the 60 s tick handles — no reading arrives to trigger
   them).
+- **Aggregated** — *(optional, see config)* fires one 📊 message when more than
+  `aggregated_count` readings are at/above `aggregated_threshold_c` within the last
+  `aggregated_window_minutes`. Meant for a lower threshold than the main one to
+  catch a slow warm-up. There is **no recovery message** — the alert re-arms
+  silently once the window count falls back to the threshold or below. It is
+  **suppressed while a main breach is active** (an already-alerting machine
+  doesn't also raise an aggregated alert), and stays suppressed until the window
+  clears, so a real breach never produces a duplicate aggregated alert on
+  recovery.
 
 Ingest-time evaluation runs in the background so a slow Telegram send never blocks
 the agent's POST. Readings older than 24 h are pruned each tick; the alert history
