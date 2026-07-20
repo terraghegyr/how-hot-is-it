@@ -283,9 +283,10 @@ func (s *Store) LatestReading(id string) (Reading, error) {
 }
 
 // History returns uPlot-native columnar data for the given machine ids over
-// readings with ts >= since. Readings are bucketed to 60s so multiple machines
-// share a clean, aligned time axis; buckets a machine has no reading in are null,
-// so gaps (outages) break the line instead of interpolating.
+// readings with ts >= since. Readings are bucketed to 60s (max temp per bucket)
+// so multiple machines share a clean, aligned time axis and hot spikes are never
+// hidden; buckets a machine has no reading in are null, so gaps (outages) break
+// the line instead of interpolating.
 type History struct {
 	IDs  []string `json:"ids"`
 	Data []any    `json:"data"` // [ []int64 timestamps, []*float64 per machine... ]
@@ -310,7 +311,11 @@ func (s *Store) History(ids []string, since int64) (History, error) {
 				return h, err
 			}
 			b := ts - ts%60
-			m[b] = t // last reading in the bucket wins
+			// Keep the hottest reading in each bucket so a sub-minute spike that
+			// tripped an alert is never hidden by a cooler neighbour.
+			if cur, ok := m[b]; !ok || t > cur {
+				m[b] = t
+			}
 			bucketSet[b] = struct{}{}
 		}
 		if err := rows.Err(); err != nil {

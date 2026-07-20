@@ -150,3 +150,25 @@ func TestHistoryColumnarWithGaps(t *testing.T) {
 		t.Fatalf("expected a[2]=42, got %v", seriesA[2])
 	}
 }
+
+func TestHistoryBucketKeepsMaxSpike(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("a", 1000)
+	base := int64(1_700_000_040)
+	base = base - base%60 // align to bucket boundary
+	// Two readings in the same 60s bucket: a hot spike then a cooler reading.
+	s.AddReading(m.ID, base+0, 57) // spike (would trip an alert)
+	s.AddReading(m.ID, base+30, 46) // cooler, arrives later in the same bucket
+
+	h, err := s.History([]string{m.ID}, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	series := h.Data[1].([]*float64)
+	if len(series) != 1 || series[0] == nil {
+		t.Fatalf("expected one non-nil bucket, got %v", series)
+	}
+	if *series[0] != 57 {
+		t.Fatalf("bucket must keep the max (57) spike, got %v", *series[0])
+	}
+}

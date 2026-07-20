@@ -55,7 +55,22 @@ function makeChart(names) {
   const opts = {
     width: $("#chart").clientWidth || 800,
     height: chartHeight(),
-    scales: { x: { time: true } },
+    scales: {
+      x: { time: true },
+      // Always keep the threshold within view so the dashed reference line shows
+      // even when every reading is well below it.
+      y: {
+        range: (u, dataMin, dataMax) => {
+          let lo = dataMin, hi = dataMax;
+          if (lo == null || hi == null) {
+            return threshold == null ? [0, 100] : [threshold - 5, threshold + 5];
+          }
+          if (threshold != null) { lo = Math.min(lo, threshold); hi = Math.max(hi, threshold); }
+          const pad = Math.max((hi - lo) * 0.1, 2);
+          return [lo - pad, hi + pad];
+        },
+      },
+    },
     axes: [
       { stroke: "#8b909a", grid: { stroke: "#2a2e37" } },
       { stroke: "#8b909a", grid: { stroke: "#2a2e37" }, values: (u, vals) => vals.map((v) => v + "°") },
