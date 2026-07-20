@@ -29,7 +29,7 @@ build-static:
 	cd $(SERVER) && CGO_ENABLED=0 go build -ldflags="-s -w" -o ../how-hot-is-it .
 
 docker:
-	docker build -t how-hot-is-it ./$(SERVER)
+	docker build ./$(SERVER)
 
 run: build
 	./how-hot-is-it -config config.json -db howhot.db

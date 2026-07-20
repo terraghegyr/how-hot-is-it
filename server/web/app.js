@@ -15,6 +15,9 @@ async function getJSON(url) {
 
 function colorFor(i) { return PALETTE[i % PALETTE.length]; }
 
+// Shorter chart on phones so it fits above the panel without scrolling.
+function chartHeight() { return window.innerWidth <= 560 ? 240 : 360; }
+
 // Draw a dashed horizontal reference line at the alert threshold.
 const thresholdPlugin = {
   hooks: {
@@ -47,7 +50,7 @@ function makeChart(names) {
   });
   const opts = {
     width: $("#chart").clientWidth || 800,
-    height: 360,
+    height: chartHeight(),
     scales: { x: { time: true } },
     axes: [
       { stroke: "#8b909a", grid: { stroke: "#2a2e37" } },
@@ -104,11 +107,11 @@ function renderAlerts(alerts) {
   }
   for (const a of alerts) {
     const tr = document.createElement("tr");
-    const when = new Date(a.ts * 1000).toLocaleString();
+    const when = fmtAlertTime(a.ts);
     const tg = a.telegram_ok ? "" : '<span class="tg-fail" title="Telegram delivery failed">TG ✗</span>';
     tr.innerHTML =
-      `<td>${when}</td>` +
-      `<td>${escapeHTML(a.machine_name)}</td>` +
+      `<td class="nowrap">${when}</td>` +
+      `<td class="nowrap">${escapeHTML(a.machine_name)}</td>` +
       `<td>${EVENT_LABEL[a.type] || a.type}${tg}</td>` +
       `<td class="temp">${a.temp_c == null ? "—" : a.temp_c.toFixed(1) + "°"}</td>`;
     tb.appendChild(tr);
@@ -117,6 +120,13 @@ function renderAlerts(alerts) {
 
 function escapeHTML(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Compact local time "M/D HH:MM" — the full locale string is too wide for the panel.
+function fmtAlertTime(ts) {
+  const d = new Date(ts * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 async function refresh() {
@@ -206,16 +216,33 @@ async function deleteMachine(id, name) {
   refresh();
 }
 
+// ---- tabs (Machines / Alerts) ----
+function setupTabs() {
+  const tabs = document.querySelectorAll(".tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => {
+        const on = t === tab;
+        t.classList.toggle("active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      $("#tab-machines").hidden = tab.dataset.tab !== "machines";
+      $("#tab-alerts").hidden = tab.dataset.tab !== "alerts";
+    });
+  });
+}
+
 async function init() {
   try {
     const cfg = await getJSON("/api/config");
     if (cfg.alert_threshold_c) threshold = cfg.alert_threshold_c;
   } catch (e) { /* keep default */ }
+  setupTabs();
   setupDialog();
   await refresh();
   setInterval(refresh, 60000);
   window.addEventListener("resize", () => {
-    if (chart) chart.setSize({ width: $("#chart").clientWidth, height: 360 });
+    if (chart) chart.setSize({ width: $("#chart").clientWidth, height: chartHeight() });
   });
 }
 

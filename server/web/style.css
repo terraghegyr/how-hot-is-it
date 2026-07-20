@@ -23,6 +23,8 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 12px 20px;
   border-bottom: 1px solid var(--line);
 }
@@ -38,7 +40,7 @@ button {
   font: inherit;
 }
 button.secondary, #add-cancel { background: #30363d; }
-button.danger { background: var(--red); padding: 4px 8px; }
+button.danger { background: var(--red); padding: 4px 10px; }
 
 main {
   display: grid;
@@ -46,17 +48,31 @@ main {
   gap: 16px;
   padding: 16px 20px;
 }
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
 #chart-wrap, #side { background: var(--panel); border: 1px solid var(--line); padding: 12px; }
 #chart { width: 100%; }
 
+/* Tabbed side panel: Machines / Alerts */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.tab {
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-size: 13px;
+}
+.tab.active { color: var(--fg); border-bottom-color: var(--green); }
+.tab-panel[hidden] { display: none; }
+.table-scroll { overflow-x: auto; }
+
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 8px; }
-#side h2:first-child { margin-top: 0; }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
 th { color: var(--muted); font-weight: 600; }
+.nowrap { white-space: nowrap; }
 
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .dot.green { background: var(--green); }
@@ -64,7 +80,7 @@ th { color: var(--muted); font-weight: 600; }
 .dot.red { background: var(--red); }
 .dot.grey { background: var(--grey); }
 
-.temp { font-variant-numeric: tabular-nums; }
+.temp { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tg-fail { color: var(--red); font-weight: 600; margin-left: 4px; }
 
 dialog {
@@ -72,6 +88,7 @@ dialog {
   color: var(--fg);
   border: 1px solid var(--line);
   padding: 20px;
+  width: calc(100vw - 32px);
   max-width: 520px;
 }
 dialog::backdrop { background: rgba(0,0,0,.5); }
@@ -85,4 +102,17 @@ pre {
   overflow-x: auto;
   white-space: pre;
   font-size: 12px;
+}
+
+/* Mobile / narrow viewports: stack chart above the panel, roomier tap targets. */
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+}
+@media (max-width: 560px) {
+  header { padding: 10px 12px; }
+  header h1 { font-size: 16px; }
+  #add-btn { flex: 1 1 100%; }
+  .tab { flex: 1; text-align: center; padding: 10px 8px; }
+  button.danger { padding: 8px 12px; }
+  th, td { padding: 8px 4px; }
 }
