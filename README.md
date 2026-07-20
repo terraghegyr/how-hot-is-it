@@ -185,7 +185,9 @@ As below code snipped shows, you only need to post Machine ID and Temperature to
 The dashboard **polls** `GET /api/config`, `/api/machines`, `/api/history`, and
 `/api/alerts` every 30 s (matching the agent report cadence) and redraws — the
 alert **threshold line and colour coding come from `alert_threshold_c` in the
-config on every poll**, nothing is hardcoded in the page. Polling was chosen over
+config on every poll**, nothing is hardcoded in the page. The chart draws a red
+dashed line at the main threshold and, when the aggregated alert is enabled, an
+amber dashed line at `aggregated_threshold_c`. Polling was chosen over
 a push channel (SSE/WebSockets) on purpose: push would add long-lived
 connections and a broadcast hub on the server for a dashboard where 30 s
 freshness is plenty. If you ever want true real-time, an SSE endpoint is the

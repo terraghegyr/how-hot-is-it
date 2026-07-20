@@ -5,6 +5,9 @@ const PALETTE = ["#58a6ff", "#3fb950", "#d29922", "#f85149", "#bc8cff", "#39c5cf
 // refresh, so it always reflects the server's configured alert_threshold_c
 // (and picks up a config change after a server restart without a page reload).
 let threshold = null;
+// Aggregated alert threshold (°C), null when the feature is disabled. Also from
+// GET /api/config each refresh; drives the amber reference line.
+let aggThreshold = null;
 let chart = null;
 let chartMachineIDs = [];
 
@@ -21,22 +24,28 @@ function colorFor(i) { return PALETTE[i % PALETTE.length]; }
 // Shorter chart on phones so it fits above the panel without scrolling.
 function chartHeight() { return window.innerWidth <= 560 ? 240 : 360; }
 
-// Draw a dashed horizontal reference line at the alert threshold.
+// Draw a dashed horizontal reference line at value in the given colour.
+function drawThresholdLine(u, value, color) {
+  const y = u.valToPos(value, "y", true);
+  const ctx = u.ctx;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.setLineDash([5, 4]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(u.bbox.left, y);
+  ctx.lineTo(u.bbox.left + u.bbox.width, y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Reference lines: amber for the aggregated threshold, red for the main one.
+// The aggregated line is drawn first so the red main line sits on top if equal.
 const thresholdPlugin = {
   hooks: {
     draw: (u) => {
-      if (threshold == null) return; // config not loaded yet
-      const y = u.valToPos(threshold, "y", true);
-      const ctx = u.ctx;
-      ctx.save();
-      ctx.strokeStyle = "#f85149";
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(u.bbox.left, y);
-      ctx.lineTo(u.bbox.left + u.bbox.width, y);
-      ctx.stroke();
-      ctx.restore();
+      if (aggThreshold != null) drawThresholdLine(u, aggThreshold, "#d29922");
+      if (threshold != null) drawThresholdLine(u, threshold, "#f85149");
     },
   },
 };
@@ -57,15 +66,17 @@ function makeChart(names) {
     height: chartHeight(),
     scales: {
       x: { time: true },
-      // Always keep the threshold within view so the dashed reference line shows
-      // even when every reading is well below it.
+      // Always keep both reference lines within view so they show even when every
+      // reading is well below them.
       y: {
         range: (u, dataMin, dataMax) => {
+          const lines = [threshold, aggThreshold].filter((v) => v != null);
           let lo = dataMin, hi = dataMax;
           if (lo == null || hi == null) {
-            return threshold == null ? [0, 100] : [threshold - 5, threshold + 5];
+            if (lines.length === 0) return [0, 100];
+            return [Math.min(...lines) - 5, Math.max(...lines) + 5];
           }
-          if (threshold != null) { lo = Math.min(lo, threshold); hi = Math.max(hi, threshold); }
+          for (const v of lines) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
           const pad = Math.max((hi - lo) * 0.1, 2);
           return [lo - pad, hi + pad];
         },
@@ -159,6 +170,8 @@ async function refresh() {
       getJSON("/api/alerts?limit=50"),
     ]);
     if (typeof cfg.alert_threshold_c === "number") threshold = cfg.alert_threshold_c;
+    // 0 (or missing) means the aggregated alert is disabled -> no amber line.
+    aggThreshold = cfg.aggregated_threshold_c > 0 ? cfg.aggregated_threshold_c : null;
     renderMachines(machines);
     renderAlerts(alerts);
 

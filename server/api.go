@@ -13,17 +13,21 @@ import (
 type Server struct {
 	store     *Store
 	threshold float64
-	webFS     fs.FS
-	now       func() time.Time
+	// aggThreshold is exposed to the UI to draw the aggregated reference line.
+	// 0 means the aggregated alert is disabled (no line drawn).
+	aggThreshold float64
+	webFS        fs.FS
+	now          func() time.Time
 	// onReport, if set, is called after a reading is ingested so the alert state
 	// machine is evaluated immediately (not just on the 60s tick). May be nil.
 	onReport func(machineID, name string)
 }
 
 // NewServer builds the http.Handler with all routes registered. onReport may be
-// nil (tests that don't exercise alerting pass nil).
-func NewServer(store *Store, threshold float64, webFS fs.FS, now func() time.Time, onReport func(machineID, name string)) http.Handler {
-	s := &Server{store: store, threshold: threshold, webFS: webFS, now: now, onReport: onReport}
+// nil (tests that don't exercise alerting pass nil). aggThreshold is 0 when the
+// aggregated alert is disabled.
+func NewServer(store *Store, threshold, aggThreshold float64, webFS fs.FS, now func() time.Time, onReport func(machineID, name string)) http.Handler {
+	s := &Server{store: store, threshold: threshold, aggThreshold: aggThreshold, webFS: webFS, now: now, onReport: onReport}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/machines", s.handleMachines)
@@ -43,7 +47,10 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"alert_threshold_c": s.threshold})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"alert_threshold_c":      s.threshold,
+		"aggregated_threshold_c": s.aggThreshold, // 0 = disabled, UI hides the line
+	})
 }
 
 // POST /api/report {machine_id, temp_c}

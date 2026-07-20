@@ -19,9 +19,28 @@ func newTestServer(t *testing.T, s *Store, now func() time.Time) *httptest.Serve
 func newTestServerHook(t *testing.T, s *Store, now func() time.Time, onReport func(string, string)) *httptest.Server {
 	t.Helper()
 	var webFS fs.FS = fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
-	srv := httptest.NewServer(NewServer(s, testThreshold, webFS, now, onReport))
+	srv := httptest.NewServer(NewServer(s, testThreshold, 0, webFS, now, onReport))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func TestConfigEndpointExposesThresholds(t *testing.T) {
+	s := newTestStore(t)
+	var webFS fs.FS = fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
+	srv := httptest.NewServer(NewServer(s, 80, 50, webFS, fixedClock(1), nil))
+	t.Cleanup(srv.Close)
+
+	_, body := doJSON(t, "GET", srv.URL+"/api/config", nil)
+	var cfg struct {
+		Alert float64 `json:"alert_threshold_c"`
+		Agg   float64 `json:"aggregated_threshold_c"`
+	}
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Alert != 80 || cfg.Agg != 50 {
+		t.Fatalf("expected 80/50, got %v/%v", cfg.Alert, cfg.Agg)
+	}
 }
 
 func doJSON(t *testing.T, method, url string, body any) (*http.Response, []byte) {

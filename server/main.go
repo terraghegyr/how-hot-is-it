@@ -59,7 +59,12 @@ func main() {
 			}
 		}()
 	}
-	handler := NewServer(store, cfg.AlertThresholdC, webFS, now, onReport)
+	// Only advertise the aggregated threshold to the UI when the feature is on.
+	var aggThresholdUI float64
+	if cfg.AggregatedEnabled() {
+		aggThresholdUI = cfg.AggregatedThresholdC
+	}
+	handler := NewServer(store, cfg.AlertThresholdC, aggThresholdUI, webFS, now, onReport)
 
 	addr := ":" + strconv.Itoa(cfg.ListenPort)
 	log.Printf("how-hot-is-it listening on %s (threshold %.0f°C, alerting=%v, aggregated=%v)",
