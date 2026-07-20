@@ -158,15 +158,29 @@ async function refresh() {
 }
 
 // ---- enrollment dialog ----
-function agentSnippet(id) {
-  const base = location.origin;
+// The agent's config env vars, pasted into the top of agent.sh.
+function envSnippet(id) {
+  return [`SERVER_URL="${location.origin}"`, `MACHINE_ID="${id}"`].join("\n");
+}
+
+// Cron entries. Cron's finest granularity is one minute, so "every 30s" is two
+// entries — one on the minute and one offset by 30s.
+function cronSnippet() {
   return [
-    `SERVER_URL="${base}"`,
-    `MACHINE_ID="${id}"`,
-    "",
-    "# cron (every minute):",
     "* * * * * /opt/how-hot-is-it/agent.sh",
+    "* * * * * sleep 30; /opt/how-hot-is-it/agent.sh",
   ].join("\n");
+}
+
+// Wire a Copy button to copy the text of its target <pre>, with brief feedback.
+function wireCopy(btn) {
+  btn.addEventListener("click", () => {
+    const text = $("#" + btn.dataset.copy).textContent;
+    navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => (btn.textContent = orig), 1500);
+  });
 }
 
 function setupDialog() {
@@ -194,7 +208,8 @@ function setupDialog() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       })).json();
-      $("#enroll-snippet").textContent = agentSnippet(m.id);
+      $("#enroll-env").textContent = envSnippet(m.id);
+      $("#enroll-cron").textContent = cronSnippet();
       form.hidden = true;
       result.hidden = false;
       refresh();
@@ -203,11 +218,7 @@ function setupDialog() {
     }
   });
 
-  $("#copy-btn").addEventListener("click", () => {
-    navigator.clipboard.writeText($("#enroll-snippet").textContent);
-    $("#copy-btn").textContent = "Copied!";
-    setTimeout(() => ($("#copy-btn").textContent = "Copy"), 1500);
-  });
+  document.querySelectorAll("[data-copy]").forEach(wireCopy);
 }
 
 async function deleteMachine(id, name) {

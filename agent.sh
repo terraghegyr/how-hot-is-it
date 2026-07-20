@@ -1,7 +1,9 @@
 #!/bin/sh
 # how-hot-is-it agent: reads max CPU temperature and POSTs it to the server.
 # Dependencies: lm-sensors (sensors), curl, awk. Nothing else.
-# Run from cron: * * * * * /opt/how-hot-is-it/agent.sh
+# Run from cron every 30s (cron's floor is 1 min, so use two offset entries):
+#   * * * * * /opt/how-hot-is-it/agent.sh
+#   * * * * * sleep 30; /opt/how-hot-is-it/agent.sh
 
 # ==== config (edit these) ====
 SERVER_URL="http://192.168.1.10:8080"

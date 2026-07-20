@@ -17,7 +17,10 @@ recovery, and reporting outages.
 
 ```
 server/     Go module: the binary, embedded web/ dashboard, Dockerfile
-agent.sh    host-side shell agent (+ test-agent.sh, testdata/)
+            (Go *_test.go files live here beside the code they test —
+             Go requires tests in the same package)
+agent.sh    host-side shell agent
+test/       agent shell tests + sensor fixtures (test-agent.sh, testdata/)
 docker-compose.yml, Makefile   build/run orchestration (root)
 ```
 
@@ -60,17 +63,28 @@ make run          # builds and runs with ./config.json and ./howhot.db
 ## Enrolling a machine
 
 1. On the dashboard click **Add machine**, enter a name. The server returns a
-   generated 8-char ID and shows a paste-ready snippet.
-2. Copy the `SERVER_URL` and `MACHINE_ID` lines into `agent.sh` on the host.
-3. Install the agent and add the cron entry:
+   generated 8-char ID and shows two paste-ready blocks (env values + cron).
+2. Copy the agent onto the host and make it executable:
 
    ```sh
-   sudo install -D agent.sh /opt/how-hot-is-it/agent.sh
-   # edit SERVER_URL and MACHINE_ID at the top of the script
-   ( crontab -l 2>/dev/null; echo '* * * * * /opt/how-hot-is-it/agent.sh' ) | crontab -
+   sudo mkdir -p /opt/how-hot-is-it
+   sudo cp agent.sh /opt/how-hot-is-it/agent.sh
+   sudo chmod +x /opt/how-hot-is-it/agent.sh
    ```
 
-4. Within a minute the machine flips from grey to live on the dashboard.
+3. Paste the `SERVER_URL` / `MACHINE_ID` block into the config section at the top
+   of `/opt/how-hot-is-it/agent.sh`.
+4. Add the cron entries. Cron's finest granularity is one minute, so reporting
+   every 30 s uses two entries — one on the minute and one offset by 30 s:
+
+   ```sh
+   ( crontab -l 2>/dev/null
+     echo '* * * * * /opt/how-hot-is-it/agent.sh'
+     echo '* * * * * sleep 30; /opt/how-hot-is-it/agent.sh'
+   ) | crontab -
+   ```
+
+5. Within a minute the machine flips from grey to live on the dashboard.
 
 Unknown machine IDs posting to `/api/report` get a `404` and are discarded —
 there is no auto-enrollment. Deleting a machine removes its readings and alert
@@ -118,8 +132,11 @@ make docker   # build the scratch image
   `httptest.Server`.
 - SQLite tests use a temp-file DB per test.
 - `agent.sh`'s `parse_temp` reads `sensors -j` from stdin so fixtures
-  (`testdata/sensors-*.json`) can be piped in; `test-agent.sh` runs these and
-  `shellcheck` if it is installed.
+  (`test/testdata/sensors-*.json`) can be piped in; `test/test-agent.sh` runs
+  these and `shellcheck` if it is installed.
+- Go `*_test.go` files stay under `server/` alongside the code — Go requires
+  tests in the same package to reach unexported identifiers. Only the agent's
+  shell tests and fixtures live under `test/`.
 
 ## Manual checks (not automated)
 

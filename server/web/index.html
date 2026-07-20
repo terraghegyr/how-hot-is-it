@@ -56,10 +56,18 @@
     </form>
     <div id="enroll-result" hidden>
       <h2>Machine created ✅</h2>
-      <p>Paste these into <code>agent.sh</code> on the host, then add the cron line:</p>
-      <pre id="enroll-snippet"></pre>
-      <button id="copy-btn">Copy</button>
-      <button id="enroll-close">Done</button>
+
+      <p class="step">1. Paste these into the config block at the top of <code>agent.sh</code>:</p>
+      <pre id="enroll-env"></pre>
+      <button class="secondary" data-copy="enroll-env">Copy env</button>
+
+      <p class="step">2. Add these cron entries (reports every 30s):</p>
+      <pre id="enroll-cron"></pre>
+      <button class="secondary" data-copy="enroll-cron">Copy cron</button>
+
+      <div class="dialog-actions">
+        <button id="enroll-close">Done</button>
+      </div>
     </div>
   </dialog>
 

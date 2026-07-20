@@ -4,7 +4,8 @@
 set -u
 
 DIR=$(dirname "$0")
-HHII_LIB=1 . "$DIR/agent.sh"
+AGENT="$DIR/../agent.sh"   # agent.sh lives at the repo root; tests live in test/
+HHII_LIB=1 . "$AGENT"
 
 fail=0
 check() {
@@ -40,7 +41,7 @@ check "empty stdin exit code" "1" "$rc"
 
 # shellcheck is optional (not always installed in CI sandboxes).
 if command -v shellcheck >/dev/null 2>&1; then
-	if shellcheck "$DIR/agent.sh" "$DIR/test-agent.sh"; then
+	if shellcheck "$AGENT" "$DIR/test-agent.sh"; then
 		echo "ok   - shellcheck clean"
 	else
 		echo "FAIL - shellcheck reported issues"
