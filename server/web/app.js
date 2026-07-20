@@ -221,8 +221,31 @@ function setupDialog() {
   document.querySelectorAll("[data-copy]").forEach(wireCopy);
 }
 
+// Styled in-app confirmation (native confirm() looks out of place with the UI).
+// Resolves true if the user confirms, false on Cancel or Esc.
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    const dlg = $("#confirm-dialog");
+    $("#confirm-msg").textContent = message;
+    const done = (result) => {
+      $("#confirm-ok").removeEventListener("click", onOk);
+      $("#confirm-cancel").removeEventListener("click", onCancel);
+      dlg.removeEventListener("cancel", onCancel);
+      if (dlg.open) dlg.close();
+      resolve(result);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    $("#confirm-ok").addEventListener("click", onOk);
+    $("#confirm-cancel").addEventListener("click", onCancel);
+    dlg.addEventListener("cancel", onCancel); // Esc key
+    dlg.showModal();
+  });
+}
+
 async function deleteMachine(id, name) {
-  if (!confirm(`Delete "${name}"? Its readings will be removed; past alerts stay in history.`)) return;
+  const ok = await showConfirm(`Delete "${name}"? Its readings will be removed; past alerts stay in history.`);
+  if (!ok) return;
   await fetch("/api/machines/" + id, { method: "DELETE" });
   refresh();
 }
