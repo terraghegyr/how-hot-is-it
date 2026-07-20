@@ -7,7 +7,7 @@ recovery, and reporting outages.
 
 > (I'm running Proxmox on second-hand old office desktop. Grafana is great but I only watch temperature and for that, it is too much both capability wise and resource usage wise. So I made this.)
 
-> (Entirely Claude coded. Throughly but only tested in my environement: Proxmox, Intel Core i7-8700 CPU)
+> (Entirely Claude coded. Throughly but only tested in my environement: Proxmox 8.4.19, Intel Core i7-8700 CPU)
 
 > This is very simple system especially the agent side since it is only just a bash script, but use at your own risk.
 
