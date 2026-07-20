@@ -1,0 +1,9 @@
+# Build artifacts
+/how-hot-is-it
+
+# Runtime data (config + database live in ./data via the compose bind mount)
+/data/
+*.db
+*.db-shm
+*.db-wal
+config.json

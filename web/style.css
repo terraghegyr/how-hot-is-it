@@ -1,0 +1,91 @@
+:root {
+  --bg: #0f1115;
+  --panel: #1a1d24;
+  --fg: #e6e8ec;
+  --muted: #8b909a;
+  --line: #2a2e37;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+  --grey: #6e7681;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 14px/1.4 system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+header h1 { font-size: 18px; margin: 0; }
+
+button {
+  background: #238636;
+  color: #fff;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+button.secondary, #add-cancel { background: #30363d; }
+button.danger { background: var(--red); padding: 4px 8px; }
+
+main {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 16px;
+  padding: 16px 20px;
+}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+#chart-wrap, #side { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+#chart { width: 100%; }
+
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 16px 0 8px; }
+#side h2:first-child { margin-top: 0; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+th { color: var(--muted); font-weight: 600; }
+
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.dot.green { background: var(--green); }
+.dot.amber { background: var(--amber); }
+.dot.red { background: var(--red); }
+.dot.grey { background: var(--grey); }
+
+.temp { font-variant-numeric: tabular-nums; }
+.tg-fail { color: var(--red); font-weight: 600; margin-left: 4px; }
+
+dialog {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 520px;
+}
+dialog::backdrop { background: rgba(0,0,0,.5); }
+dialog label { display: block; margin: 12px 0; }
+dialog input { width: 100%; padding: 8px; margin-top: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+pre {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 12px;
+}

@@ -1,0 +1,28 @@
+{
+   "coretemp-isa-0000":{
+      "Adapter": "ISA adapter",
+      "Package id 0":{
+         "temp1_input": 45.000,
+         "temp1_max": 80.000,
+         "temp1_crit": 100.000,
+         "temp1_crit_alarm": 0.000
+      },
+      "Core 0":{
+         "temp2_input": 43.000,
+         "temp2_max": 80.000
+      },
+      "Core 1":{
+         "temp3_input": 44.000,
+         "temp3_max": 80.000
+      }
+   },
+   "nct6791-isa-0290":{
+      "Adapter": "ISA adapter",
+      "fan1":{
+         "fan1_input": 1200.000
+      },
+      "in0":{
+         "in0_input": 1.320
+      }
+   }
+}

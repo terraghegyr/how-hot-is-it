@@ -1,0 +1,155 @@
+package main
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// fakeClock is an advanceable clock for driving the monitor without sleeping.
+type fakeClock struct{ t time.Time }
+
+func (c *fakeClock) now() time.Time          { return c.t }
+func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+func TestIntegrationBreachSustainedRecovery(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("hotbox", 1000)
+
+	var msgCount int32
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&msgCount, 1)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer tg.Close()
+
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	notifier := &TelegramNotifier{BaseURL: tg.URL, Token: "t", ChatID: "c", Client: &http.Client{Timeout: 5 * time.Second}}
+	mon := &Monitor{store: s, notify: notifier, threshold: testThreshold, alertingEnabled: true, now: clk.now}
+
+	// t0: breach.
+	s.AddReading(m.ID, clk.now().Unix(), 85)
+	if err := mon.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	// +30min: sustained -> one re-notify.
+	clk.advance(30 * time.Minute)
+	s.AddReading(m.ID, clk.now().Unix(), 85)
+	if err := mon.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	// +1min: still hot but not yet 30min since last notify -> silent.
+	clk.advance(1 * time.Minute)
+	s.AddReading(m.ID, clk.now().Unix(), 85)
+	if err := mon.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	// +29min (=60min total): recovery.
+	clk.advance(29 * time.Minute)
+	s.AddReading(m.ID, clk.now().Unix(), 70)
+	if err := mon.Tick(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := atomic.LoadInt32(&msgCount); got != 3 {
+		t.Fatalf("expected exactly 3 Telegram messages (breach, re-notify, recovery), got %d", got)
+	}
+
+	// History rows: only transitions persist (breach + recovery), not the re-notify.
+	alerts, _ := s.ListAlerts(50)
+	if len(alerts) != 2 {
+		t.Fatalf("expected 2 alert history rows, got %d: %+v", len(alerts), alerts)
+	}
+	if alerts[0].Type != "recovery" || alerts[1].Type != "breach" {
+		t.Fatalf("expected [recovery, breach] newest-first, got %s,%s", alerts[0].Type, alerts[1].Type)
+	}
+	for _, a := range alerts {
+		if !a.TelegramOK {
+			t.Fatalf("expected telegram_ok for %s", a.Type)
+		}
+	}
+}
+
+func TestIntegrationTelegramFailureRecorded(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("hotbox", 1000)
+
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer tg.Close()
+
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	notifier := &TelegramNotifier{BaseURL: tg.URL, Token: "t", ChatID: "c", Client: &http.Client{Timeout: 5 * time.Second}}
+	mon := &Monitor{store: s, notify: notifier, threshold: testThreshold, alertingEnabled: true, now: clk.now}
+
+	s.AddReading(m.ID, clk.now().Unix(), 90)
+	if err := mon.Tick(); err != nil {
+		t.Fatalf("tick must not fail on Telegram error: %v", err)
+	}
+
+	alerts, _ := s.ListAlerts(50)
+	if len(alerts) != 1 || alerts[0].Type != "breach" {
+		t.Fatalf("expected one breach row, got %+v", alerts)
+	}
+	if alerts[0].TelegramOK {
+		t.Fatal("expected telegram_ok=false after 500 response")
+	}
+}
+
+func TestIntegrationAlertingDisabledStillRecords(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("hotbox", 1000)
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	// alertingEnabled=false: no Telegram, but history must still be written with
+	// telegram_ok=1 (delivery not attempted counts as ok).
+	mon := &Monitor{store: s, notify: nil, threshold: testThreshold, alertingEnabled: false, now: clk.now}
+
+	s.AddReading(m.ID, clk.now().Unix(), 95)
+	if err := mon.Tick(); err != nil {
+		t.Fatal(err)
+	}
+	alerts, _ := s.ListAlerts(50)
+	if len(alerts) != 1 || alerts[0].Type != "breach" || !alerts[0].TelegramOK {
+		t.Fatalf("expected one breach row with telegram_ok=true, got %+v", alerts)
+	}
+}
+
+func TestIntegrationStaleDetection(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("quietbox", 1000)
+
+	var msgCount int32
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&msgCount, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer tg.Close()
+
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	notifier := &TelegramNotifier{BaseURL: tg.URL, Token: "t", ChatID: "c", Client: &http.Client{Timeout: 5 * time.Second}}
+	mon := &Monitor{store: s, notify: notifier, threshold: testThreshold, alertingEnabled: true, now: clk.now}
+
+	// One reading, then silence past the 10-minute stale window.
+	s.AddReading(m.ID, clk.now().Unix(), 40)
+	mon.Tick() // healthy, no message
+	clk.advance(11 * time.Minute)
+	mon.Tick() // stale -> one message
+	clk.advance(1 * time.Minute)
+	mon.Tick() // still stale -> no repeat
+
+	if got := atomic.LoadInt32(&msgCount); got != 1 {
+		t.Fatalf("expected exactly 1 stale message, got %d", got)
+	}
+
+	// Reports again -> stale_recovery message.
+	clk.advance(1 * time.Minute)
+	s.AddReading(m.ID, clk.now().Unix(), 41)
+	mon.Tick()
+	if got := atomic.LoadInt32(&msgCount); got != 2 {
+		t.Fatalf("expected stale + stale_recovery = 2 messages, got %d", got)
+	}
+}

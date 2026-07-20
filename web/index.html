@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>how-hot-is-it</title>
+  <link rel="stylesheet" href="/vendor/uPlot.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>🌡️ how-hot-is-it</h1>
+    <button id="add-btn">+ Add machine</button>
+  </header>
+
+  <main>
+    <section id="chart-wrap">
+      <div id="chart"></div>
+    </section>
+
+    <section id="side">
+      <h2>Machines</h2>
+      <table id="machines">
+        <tbody></tbody>
+      </table>
+
+      <h2>Alert history</h2>
+      <table id="alerts">
+        <thead>
+          <tr><th>Time</th><th>Machine</th><th>Event</th><th>Temp</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <dialog id="add-dialog">
+    <form method="dialog" id="add-form">
+      <h2>Add machine</h2>
+      <label>Name <input id="machine-name" required autocomplete="off"></label>
+      <div class="dialog-actions">
+        <button value="cancel" type="button" id="add-cancel">Cancel</button>
+        <button value="ok" id="add-ok">Create</button>
+      </div>
+    </form>
+    <div id="enroll-result" hidden>
+      <h2>Machine created ✅</h2>
+      <p>Paste these into <code>agent.sh</code> on the host, then add the cron line:</p>
+      <pre id="enroll-snippet"></pre>
+      <button id="copy-btn">Copy</button>
+      <button id="enroll-close">Done</button>
+    </div>
+  </dialog>
+
+  <script src="/vendor/uPlot.iife.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
