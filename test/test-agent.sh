@@ -28,6 +28,11 @@ check "intel coretemp max temp" "45.0" "$got"
 got=$(parse_temp < "$DIR/testdata/sensors-amd.json")
 check "amd k10temp max temp" "62.5" "$got"
 
+# Proxmox-style multi-chip host: the CPU (coretemp Package id 0) is 44.0, while a
+# hotter pch chipset (50.0), acpitz, and nvme drive must be ignored.
+got=$(parse_temp < "$DIR/testdata/sensors-proxmox.json")
+check "proxmox picks CPU not chipset/nvme" "44.0" "$got"
+
 # Empty/malformed JSON: no temperature, non-zero exit, empty output.
 got=$(parse_temp < "$DIR/testdata/sensors-empty.json")
 rc=$?
