@@ -115,6 +115,17 @@ Evaluated every 60 s against the latest reading per machine:
 Readings older than 24 h are pruned each tick; the alert history is capped at the
 most recent 500 rows.
 
+## Dashboard refresh
+
+The dashboard **polls** `GET /api/config`, `/api/machines`, `/api/history`, and
+`/api/alerts` every 30 s (matching the agent report cadence) and redraws — the
+alert **threshold line and colour coding come from `alert_threshold_c` in the
+config on every poll**, nothing is hardcoded in the page. Polling was chosen over
+a push channel (SSE/WebSockets) on purpose: push would add long-lived
+connections and a broadcast hub on the server for a dashboard where 30 s
+freshness is plenty. If you ever want true real-time, an SSE endpoint is the
+smallest add — but it isn't needed for this workload.
+
 ## Development & tests
 
 Everything meaningful is testable headless — no sensors hardware, no Telegram
