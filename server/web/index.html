@@ -19,18 +19,29 @@
     </section>
 
     <section id="side">
-      <h2>Machines</h2>
-      <table id="machines">
-        <tbody></tbody>
-      </table>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="machines" role="tab" aria-selected="true">Machines</button>
+        <button class="tab" data-tab="alerts" role="tab" aria-selected="false">Alerts</button>
+      </div>
 
-      <h2>Alert history</h2>
-      <table id="alerts">
-        <thead>
-          <tr><th>Time</th><th>Machine</th><th>Event</th><th>Temp</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+      <div id="tab-machines" class="tab-panel" role="tabpanel">
+        <div class="table-scroll">
+          <table id="machines">
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab-alerts" class="tab-panel" role="tabpanel" hidden>
+        <div class="table-scroll">
+          <table id="alerts">
+            <thead>
+              <tr><th>Time</th><th>Machine</th><th>Event</th><th>Temp</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </main>
 

@@ -13,10 +13,18 @@ recovery, and reporting outages.
 - **Frontend** — vanilla JS + [uPlot](https://github.com/leeoniya/uPlot)
   (vendored, embedded via `go:embed`). No npm, no bundler, no build step.
 
+## Layout
+
+```
+server/     Go module: the binary, embedded web/ dashboard, Dockerfile
+agent.sh    host-side shell agent (+ test-agent.sh, testdata/)
+docker-compose.yml, Makefile   build/run orchestration (root)
+```
+
 ## Quick start (server)
 
 ```sh
-cp config.example.json data/config.json   # edit as needed
+cp server/config.example.json data/config.json   # edit as needed
 docker compose up -d
 ```
 
@@ -104,7 +112,7 @@ make build    # local binary
 make docker   # build the scratch image
 ```
 
-- The alert state machine is a pure function (`alert.go`) with an injected clock —
+- The alert state machine is a pure function (`server/alert.go`) with an injected clock —
   no `time.Now()` and no `time.Sleep` in tests.
 - The Telegram sender uses an overridable base URL so tests point it at an
   `httptest.Server`.

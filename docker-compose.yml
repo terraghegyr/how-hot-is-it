@@ -1,7 +1,6 @@
 services:
   how-hot-is-it:
-    build: .
-    image: how-hot-is-it
+    build: ./server
     ports:
       - "8080:8080"
     volumes:
