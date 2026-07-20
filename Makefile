@@ -13,7 +13,7 @@ test-go:
 # Guards against accidentally importing a CGO dependency.
 test-agent:
 	cd $(SERVER) && CGO_ENABLED=0 go build -o /dev/null .
-	sh test-agent.sh
+	sh test/test-agent.sh
 
 vet:
 	cd $(SERVER) && go vet ./...

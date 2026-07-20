@@ -1,7 +1,10 @@
 "use strict";
 
 const PALETTE = ["#58a6ff", "#3fb950", "#d29922", "#f85149", "#bc8cff", "#39c5cf", "#ff7b72", "#a5d6ff"];
-let threshold = 80;
+// Alert threshold (°C). Not hardcoded — sourced from GET /api/config on every
+// refresh, so it always reflects the server's configured alert_threshold_c
+// (and picks up a config change after a server restart without a page reload).
+let threshold = null;
 let chart = null;
 let chartMachineIDs = [];
 
@@ -22,6 +25,7 @@ function chartHeight() { return window.innerWidth <= 560 ? 240 : 360; }
 const thresholdPlugin = {
   hooks: {
     draw: (u) => {
+      if (threshold == null) return; // config not loaded yet
       const y = u.valToPos(threshold, "y", true);
       const ctx = u.ctx;
       ctx.save();
@@ -68,6 +72,7 @@ function dotClass(m) {
   const now = Date.now() / 1000;
   if (m.latest_c == null || m.latest_ts == null) return "grey";
   if (now - m.latest_ts > 600) return "grey"; // stale (>10 min)
+  if (threshold == null) return "green"; // config not loaded yet
   if (m.latest_c >= threshold) return "red";
   if (m.latest_c >= threshold - 10) return "amber";
   return "green";
@@ -131,11 +136,13 @@ function fmtAlertTime(ts) {
 
 async function refresh() {
   try {
-    const [machines, history, alerts] = await Promise.all([
+    const [cfg, machines, history, alerts] = await Promise.all([
+      getJSON("/api/config"),
       getJSON("/api/machines"),
       getJSON("/api/history?ids=all"),
       getJSON("/api/alerts?limit=50"),
     ]);
+    if (typeof cfg.alert_threshold_c === "number") threshold = cfg.alert_threshold_c;
     renderMachines(machines);
     renderAlerts(alerts);
 
@@ -158,15 +165,29 @@ async function refresh() {
 }
 
 // ---- enrollment dialog ----
-function agentSnippet(id) {
-  const base = location.origin;
+// The agent's config env vars, pasted into the top of agent.sh.
+function envSnippet(id) {
+  return [`SERVER_URL="${location.origin}"`, `MACHINE_ID="${id}"`].join("\n");
+}
+
+// Cron entries. Cron's finest granularity is one minute, so "every 30s" is two
+// entries — one on the minute and one offset by 30s.
+function cronSnippet() {
   return [
-    `SERVER_URL="${base}"`,
-    `MACHINE_ID="${id}"`,
-    "",
-    "# cron (every minute):",
     "* * * * * /opt/how-hot-is-it/agent.sh",
+    "* * * * * sleep 30; /opt/how-hot-is-it/agent.sh",
   ].join("\n");
+}
+
+// Wire a Copy button to copy the text of its target <pre>, with brief feedback.
+function wireCopy(btn) {
+  btn.addEventListener("click", () => {
+    const text = $("#" + btn.dataset.copy).textContent;
+    navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => (btn.textContent = orig), 1500);
+  });
 }
 
 function setupDialog() {
@@ -194,7 +215,8 @@ function setupDialog() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       })).json();
-      $("#enroll-snippet").textContent = agentSnippet(m.id);
+      $("#enroll-env").textContent = envSnippet(m.id);
+      $("#enroll-cron").textContent = cronSnippet();
       form.hidden = true;
       result.hidden = false;
       refresh();
@@ -203,15 +225,34 @@ function setupDialog() {
     }
   });
 
-  $("#copy-btn").addEventListener("click", () => {
-    navigator.clipboard.writeText($("#enroll-snippet").textContent);
-    $("#copy-btn").textContent = "Copied!";
-    setTimeout(() => ($("#copy-btn").textContent = "Copy"), 1500);
+  document.querySelectorAll("[data-copy]").forEach(wireCopy);
+}
+
+// Styled in-app confirmation (native confirm() looks out of place with the UI).
+// Resolves true if the user confirms, false on Cancel or Esc.
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    const dlg = $("#confirm-dialog");
+    $("#confirm-msg").textContent = message;
+    const done = (result) => {
+      $("#confirm-ok").removeEventListener("click", onOk);
+      $("#confirm-cancel").removeEventListener("click", onCancel);
+      dlg.removeEventListener("cancel", onCancel);
+      if (dlg.open) dlg.close();
+      resolve(result);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    $("#confirm-ok").addEventListener("click", onOk);
+    $("#confirm-cancel").addEventListener("click", onCancel);
+    dlg.addEventListener("cancel", onCancel); // Esc key
+    dlg.showModal();
   });
 }
 
 async function deleteMachine(id, name) {
-  if (!confirm(`Delete "${name}"? Its readings will be removed; past alerts stay in history.`)) return;
+  const ok = await showConfirm(`Delete "${name}"? Its readings will be removed; past alerts stay in history.`);
+  if (!ok) return;
   await fetch("/api/machines/" + id, { method: "DELETE" });
   refresh();
 }
@@ -232,15 +273,16 @@ function setupTabs() {
   });
 }
 
+// Poll interval (ms). Agents report every 30s, so the dashboard polls at the
+// same cadence — the simplest form of "live". See README for why this stays
+// polling rather than SSE/WebSockets.
+const REFRESH_MS = 30000;
+
 async function init() {
-  try {
-    const cfg = await getJSON("/api/config");
-    if (cfg.alert_threshold_c) threshold = cfg.alert_threshold_c;
-  } catch (e) { /* keep default */ }
   setupTabs();
   setupDialog();
-  await refresh();
-  setInterval(refresh, 60000);
+  await refresh(); // pulls config (threshold), machines, history, alerts
+  setInterval(refresh, REFRESH_MS);
   window.addEventListener("resize", () => {
     if (chart) chart.setSize({ width: $("#chart").clientWidth, height: chartHeight() });
   });

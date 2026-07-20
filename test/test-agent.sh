@@ -4,7 +4,8 @@
 set -u
 
 DIR=$(dirname "$0")
-HHII_LIB=1 . "$DIR/agent.sh"
+AGENT="$DIR/../agent.sh"   # agent.sh lives at the repo root; tests live in test/
+HHII_LIB=1 . "$AGENT"
 
 fail=0
 check() {
@@ -27,6 +28,11 @@ check "intel coretemp max temp" "45.0" "$got"
 got=$(parse_temp < "$DIR/testdata/sensors-amd.json")
 check "amd k10temp max temp" "62.5" "$got"
 
+# Proxmox-style multi-chip host: the CPU (coretemp Package id 0) is 44.0, while a
+# hotter pch chipset (50.0), acpitz, and nvme drive must be ignored.
+got=$(parse_temp < "$DIR/testdata/sensors-proxmox.json")
+check "proxmox picks CPU not chipset/nvme" "44.0" "$got"
+
 # Empty/malformed JSON: no temperature, non-zero exit, empty output.
 got=$(parse_temp < "$DIR/testdata/sensors-empty.json")
 rc=$?
@@ -40,7 +46,7 @@ check "empty stdin exit code" "1" "$rc"
 
 # shellcheck is optional (not always installed in CI sandboxes).
 if command -v shellcheck >/dev/null 2>&1; then
-	if shellcheck "$DIR/agent.sh" "$DIR/test-agent.sh"; then
+	if shellcheck "$AGENT" "$DIR/test-agent.sh"; then
 		echo "ok   - shellcheck clean"
 	else
 		echo "FAIL - shellcheck reported issues"

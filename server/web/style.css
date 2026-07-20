@@ -95,6 +95,10 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 dialog label { display: block; margin: 12px 0; }
 dialog input { width: 100%; padding: 8px; margin-top: 4px; background: var(--bg); border: 1px solid var(--line); color: var(--fg); }
 .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+#enroll-result .step { margin: 16px 0 6px; color: var(--muted); }
+#enroll-result pre { margin: 0 0 8px; }
+#confirm-msg { margin: 12px 0 20px; color: var(--fg); }
+#confirm-ok { padding: 8px 14px; }
 pre {
   background: var(--bg);
   border: 1px solid var(--line);
