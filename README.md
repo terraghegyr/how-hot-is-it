@@ -6,7 +6,9 @@ SQLite, renders a live dashboard, and fires Telegram alerts on overheating,
 recovery, and reporting outages.
 
 > (I'm running Proxmox on second-hand old office desktop. Grafana is great but I only watch temperature and for that, it is too much both capability wise and resource usage wise. So I made this.)
+
 > (Entirely Claude coded. Throughly but only tested in my environement: Proxmox, Intel Core i7-8700 CPU)
+
 > This is very simple system especially the agent side since it is only just a bash script, but use at your own risk.
 
 - **Agent** — one shell script (`agent.sh`). Needs only `lm-sensors`,
@@ -18,8 +20,7 @@ recovery, and reporting outages.
 
 ## Quick start (server)
 
-`docker-compose.yml` is gitignored so each host keeps its own (ports, reverse
-proxy, networks). Start from the template:
+Start from the template (compose file is git-ignored):
 
 ```sh
 cp docker-compose.yml.example docker-compose.yml   # then adapt to your host
@@ -33,6 +34,8 @@ Open http://localhost:8080 (default). The `./data` bind mount holds `config.json
 server-assigned (agents drift).
 
 ### Behind a reverse proxy (Traefik, Caddy, nginx, …)
+
+> I'm running this behind Traefik but other reverse proxy stuff should work no matter.
 
 Adapt your local `docker-compose.yml`: usually drop the published `ports:`,
 attach the service to the proxy's network, and add the proxy's labels/route to
@@ -95,6 +98,8 @@ make run          # builds and runs with ./config.json and ./howhot.db
 Unknown machine IDs posting to `/api/report` get a `404` and are discarded —
 there is no auto-enrollment. Deleting a machine removes its readings and alert
 state but keeps its past alerts in history (under the name it had).
+
+Needless to say, if you want to "uninstall" this. Just delete CRON entry and then delete script.
 
 ---
 
@@ -177,14 +182,3 @@ make docker   # build the scratch image
 - Go `*_test.go` files stay under `server/` alongside the code — Go requires
   tests in the same package to reach unexported identifiers. Only the agent's
   shell tests and fixtures live under `test/`.
-
-## Manual checks (not automated)
-
-These need real hardware, network, or a browser and are verified by hand:
-
-1. `agent.sh` on real Intel (coretemp) and AMD (k10temp) hosts.
-2. A real Telegram message delivered **from inside the scratch container** (CA
-   certs are copied into the image for this).
-3. Two machines rendering as two series in one chart with a working legend toggle
-   and threshold line.
-4. Killing the network mid-POST leaves no hung cron processes (`curl -m 5`).
