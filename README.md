@@ -101,6 +101,11 @@ state but keeps its past alerts in history (under the name it had).
 
 Needless to say, if you want to "uninstall" this. Just delete CRON entry and then delete script.
 
+### Lastly...
+
+Since this just stores temperature data, web has no auth. Any configuration will be done via config file. 
+But if you are security-paranoid, feel free to sit this behind reverse proxy with auth (like Traefik & Authentik).
+
 ---
 
 # Dev stuff
@@ -115,7 +120,6 @@ agent.sh    host-side shell agent
 test/       agent shell tests + sensor fixtures (test-agent.sh, testdata/)
 docker-compose.yml.example, Makefile   build/run orchestration (root)
 ```
-
 
 ## API
 
@@ -148,6 +152,16 @@ the agent's POST. Readings older than 24 h are pruned each tick; the alert histo
 is capped at the most recent 500 rows. The chart buckets readings to 60 s and
 shows the **max** temp per bucket, so a spike that tripped an alert is always
 visible, and the y-axis always includes the threshold line.
+
+## Agent
+
+As below code snipped shows, you only need to post Machine ID and Temperature to /api/report endpoint every 30 secs so if you want to use other sensors (Linux, Mac, Windows whatever), you can just create custom scripts. If you feel like it, please push your script to this repository!
+
+```bash
+	curl -fsS -m 5 -X POST "$SERVER_URL/api/report" \
+		-H 'Content-Type: application/json' \
+		-d "{\"machine_id\":\"$MACHINE_ID\",\"temp_c\":$TEMP}" >/dev/null 2>&1
+```
 
 ## Dashboard refresh
 
