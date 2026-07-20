@@ -1,0 +1,11 @@
+services:
+  how-hot-is-it:
+    build: .
+    image: how-hot-is-it
+    ports:
+      - "8080:8080"
+    volumes:
+      # Holds config.json and howhot.db. The container clock equals the host
+      # clock; all reading/alert timestamps are server-assigned.
+      - ./data:/data
+    restart: unless-stopped

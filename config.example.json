@@ -1,0 +1,6 @@
+{
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+  "alert_threshold_c": 80,
+  "listen_port": 8080
+}

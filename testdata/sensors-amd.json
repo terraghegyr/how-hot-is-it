@@ -1,0 +1,14 @@
+{
+   "k10temp-pci-00c3":{
+      "Adapter": "PCI adapter",
+      "Tctl":{
+         "temp1_input": 62.500
+      },
+      "Tccd1":{
+         "temp3_input": 55.250
+      },
+      "Tccd2":{
+         "temp4_input": 54.000
+      }
+   }
+}
