@@ -13,8 +13,13 @@ import (
 
 func newTestServer(t *testing.T, s *Store, now func() time.Time) *httptest.Server {
 	t.Helper()
+	return newTestServerHook(t, s, now, nil)
+}
+
+func newTestServerHook(t *testing.T, s *Store, now func() time.Time, onReport func(string, string)) *httptest.Server {
+	t.Helper()
 	var webFS fs.FS = fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
-	srv := httptest.NewServer(NewServer(s, testThreshold, webFS, now))
+	srv := httptest.NewServer(NewServer(s, testThreshold, webFS, now, onReport))
 	t.Cleanup(srv.Close)
 	return srv
 }

@@ -15,11 +15,15 @@ type Server struct {
 	threshold float64
 	webFS     fs.FS
 	now       func() time.Time
+	// onReport, if set, is called after a reading is ingested so the alert state
+	// machine is evaluated immediately (not just on the 60s tick). May be nil.
+	onReport func(machineID, name string)
 }
 
-// NewServer builds the http.Handler with all routes registered.
-func NewServer(store *Store, threshold float64, webFS fs.FS, now func() time.Time) http.Handler {
-	s := &Server{store: store, threshold: threshold, webFS: webFS, now: now}
+// NewServer builds the http.Handler with all routes registered. onReport may be
+// nil (tests that don't exercise alerting pass nil).
+func NewServer(store *Store, threshold float64, webFS fs.FS, now func() time.Time, onReport func(machineID, name string)) http.Handler {
+	s := &Server{store: store, threshold: threshold, webFS: webFS, now: now, onReport: onReport}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/report", s.handleReport)
 	mux.HandleFunc("/api/machines", s.handleMachines)
@@ -58,7 +62,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	_, ok, err := s.store.MachineName(body.MachineID)
+	name, ok, err := s.store.MachineName(body.MachineID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -71,6 +75,11 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.AddReading(body.MachineID, s.now().Unix(), body.TempC); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
+	}
+	// Evaluate alerts for this reading right away so spikes between ticks aren't
+	// missed. The hook decides whether to run sync or in the background.
+	if s.onReport != nil {
+		s.onReport(body.MachineID, name)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -29,7 +29,8 @@ header {
   border-bottom: 1px solid var(--line);
 }
 
-header h1 { font-size: 18px; margin: 0; }
+header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+.logo { vertical-align: middle; }
 
 button {
   background: #238636;
@@ -49,8 +50,11 @@ main {
   padding: 16px 20px;
 }
 
-#chart-wrap, #side { background: var(--panel); border: 1px solid var(--line); padding: 12px; }
-#chart { width: 100%; }
+/* min-width:0 lets the grid columns shrink below the uPlot canvas's intrinsic
+   width — without it the chart won't shrink when the window narrows on desktop
+   (grid/flex children default to min-width:auto). */
+#chart-wrap, #side { background: var(--panel); border: 1px solid var(--line); padding: 12px; min-width: 0; }
+#chart { width: 100%; min-width: 0; overflow: hidden; }
 
 /* Tabbed side panel: Machines / Alerts */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }

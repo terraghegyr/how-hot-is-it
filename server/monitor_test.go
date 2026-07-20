@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +14,46 @@ type fakeClock struct{ t time.Time }
 
 func (c *fakeClock) now() time.Time          { return c.t }
 func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+// A breach reading must fire an alert on ingest, without waiting for a tick —
+// this is what prevents sub-minute spikes between ticks from being missed.
+func TestIngestTriggersImmediateAlert(t *testing.T) {
+	s := newTestStore(t)
+	m, _ := s.CreateMachine("hotbox", 1000)
+
+	var msgCount int32
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&msgCount, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer tg.Close()
+
+	clk := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	notifier := &TelegramNotifier{BaseURL: tg.URL, Token: "t", ChatID: "c", Client: &http.Client{Timeout: 5 * time.Second}}
+	mon := &Monitor{store: s, notify: notifier, threshold: testThreshold, alertingEnabled: true, now: clk.now}
+
+	// Wire the report endpoint to evaluate synchronously (deterministic in tests).
+	srv := newTestServerHook(t, s, clk.now, func(id, name string) { mon.EvaluateMachine(id, name) })
+
+	resp, err := http.Post(srv.URL+"/api/report", "application/json",
+		strings.NewReader(`{"machine_id":"`+m.ID+`","temp_c":90}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("report status %d", resp.StatusCode)
+	}
+
+	// No tick was run — the alert must have fired from the ingest path alone.
+	if got := atomic.LoadInt32(&msgCount); got != 1 {
+		t.Fatalf("expected 1 immediate alert on ingest, got %d", got)
+	}
+	alerts, _ := s.ListAlerts(50)
+	if len(alerts) != 1 || alerts[0].Type != "breach" {
+		t.Fatalf("expected one breach row, got %+v", alerts)
+	}
+}
 
 func TestIntegrationBreachSustainedRecovery(t *testing.T) {
 	s := newTestStore(t)

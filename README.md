@@ -117,17 +117,24 @@ state but keeps its past alerts in history (under the name it had).
 
 ## Alerting
 
-Evaluated every 60 s against the latest reading per machine:
+The alert state machine is evaluated **on every reading as it is ingested** (so a
+short spike between ticks is never missed) and also on a 60 s maintenance tick
+(which drives the time-based transitions and cleanup below):
 
 - **Breach** — temp ≥ threshold: one 🔥 message, then re-notified at most every
   30 min while it stays over.
 - **Recovery** — temp drops below `threshold − 3 °C` (hysteresis prevents
   flapping): one ✅ message.
 - **Stale** — a machine that reported before but has been silent for 10 min: one
-  ⚠️ message; it clears with a 📡 message when it reports again.
+  ⚠️ message; it clears with a 📡 message when it reports again (this and the
+  re-notify timer are what the 60 s tick handles — no reading arrives to trigger
+  them).
 
-Readings older than 24 h are pruned each tick; the alert history is capped at the
-most recent 500 rows.
+Ingest-time evaluation runs in the background so a slow Telegram send never blocks
+the agent's POST. Readings older than 24 h are pruned each tick; the alert history
+is capped at the most recent 500 rows. The chart buckets readings to 60 s and
+shows the **max** temp per bucket, so a spike that tripped an alert is always
+visible, and the y-axis always includes the threshold line.
 
 ## Dashboard refresh
 

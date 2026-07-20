@@ -46,7 +46,16 @@ func main() {
 	defer close(stop)
 	go mon.Run(60*time.Second, stop)
 
-	handler := NewServer(store, cfg.AlertThresholdC, webFS, now)
+	// Evaluate alerts immediately on ingest, in the background so a slow Telegram
+	// send never blocks the agent's POST.
+	onReport := func(machineID, name string) {
+		go func() {
+			if err := mon.EvaluateMachine(machineID, name); err != nil {
+				log.Printf("ingest alert eval error: %v", err)
+			}
+		}()
+	}
+	handler := NewServer(store, cfg.AlertThresholdC, webFS, now, onReport)
 
 	addr := ":" + strconv.Itoa(cfg.ListenPort)
 	log.Printf("how-hot-is-it listening on %s (threshold %.0f°C, alerting=%v)", addr, cfg.AlertThresholdC, cfg.AlertingEnabled())
