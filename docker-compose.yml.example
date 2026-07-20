@@ -1,0 +1,17 @@
+# Template compose file. Copy to docker-compose.yml (gitignored) and adapt to
+# your environment before running `docker compose up -d`.
+#
+# Behind a reverse proxy (Traefik, Caddy, nginx, ...): you typically drop the
+# published `ports:` below, attach the service to the proxy's network, and add
+# the proxy's labels. The dashboard derives the agent SERVER_URL from whatever
+# URL you browse it at (location.origin), so a Traefik hostname works as-is.
+services:
+  how-hot-is-it:
+    build: ./server
+    ports:
+      - "8080:8080"
+    volumes:
+      # Holds config.json and howhot.db. The container clock equals the host
+      # clock; all reading/alert timestamps are server-assigned.
+      - ./data:/data
+    restart: unless-stopped
