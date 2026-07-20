@@ -1,6 +1,9 @@
 # Build artifacts
 /how-hot-is-it
 
+# Local compose file (copy from docker-compose.yml.example, adapt per host)
+/docker-compose.yml
+
 # Runtime data (config + database live in ./data via the compose bind mount)
 /data/
 *.db

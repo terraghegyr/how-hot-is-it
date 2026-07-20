@@ -21,19 +21,33 @@ server/     Go module: the binary, embedded web/ dashboard, Dockerfile
              Go requires tests in the same package)
 agent.sh    host-side shell agent
 test/       agent shell tests + sensor fixtures (test-agent.sh, testdata/)
-docker-compose.yml, Makefile   build/run orchestration (root)
+docker-compose.yml.example, Makefile   build/run orchestration (root)
 ```
 
 ## Quick start (server)
 
+`docker-compose.yml` is gitignored so each host keeps its own (ports, reverse
+proxy, networks). Start from the template:
+
 ```sh
-cp server/config.example.json data/config.json   # edit as needed
+cp docker-compose.yml.example docker-compose.yml   # then adapt to your host
+mkdir -p data
+cp server/config.example.json data/config.json     # edit as needed
 docker compose up -d
 ```
 
 Open http://localhost:8080. The `./data` bind mount holds `config.json` and
 `howhot.db`. The container clock equals the host clock; all timestamps are
 server-assigned (agents drift).
+
+### Behind a reverse proxy (Traefik, Caddy, nginx, …)
+
+Adapt your local `docker-compose.yml`: usually drop the published `ports:`,
+attach the service to the proxy's network, and add the proxy's labels/route to
+container port `8080`. No app config is needed — the dashboard builds each
+agent's `SERVER_URL` from the URL you browse it at (`location.origin`), so a
+proxy hostname like `https://howhot.example.com` is what the Add-machine popup
+shows. Just make sure your agent hosts can actually reach that URL.
 
 ### Run without Docker
 
